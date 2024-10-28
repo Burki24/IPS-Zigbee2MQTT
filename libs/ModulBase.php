@@ -200,7 +200,7 @@ abstract class ModulBase extends \IPSModule
 
         foreach ($files as $file) {
             $this->WriteAttributeString('JsonFile', $file);
-            $oldfile = ReadAttributeString('JsonFile');
+            $oldfile = $this->ReadAttributeString('JsonFile');
             if (is_file($file)) {
                 if (unlink($file)) {
                     $this->LogMessage(__CLASS__ . "Datei erfolgreich gelöscht: $oldfile", KL_MESSAGE);
