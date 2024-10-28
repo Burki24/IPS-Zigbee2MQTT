@@ -195,11 +195,12 @@ abstract class ModulBase extends \IPSModule
         $vollerPfad = $kernelDir . $verzeichnisName . DIRECTORY_SEPARATOR;
         $dateiNamePattern = $instanceID . '.json';
         $dateiPfad = $vollerPfad . $dateiNamePattern;
+        $this->WriteAttributeString('JsonFile', $dateiPfad);
 
         $files = glob($dateiPfad);
 
         foreach ($files as $file) {
-            $this->WriteAttributeString('JsonFile', $file);
+
             $oldfile = $this->ReadAttributeString('JsonFile');
             if (is_file($file)) {
                 if (unlink($file)) {
