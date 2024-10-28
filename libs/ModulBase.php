@@ -187,8 +187,6 @@ abstract class ModulBase extends \IPSModule
      */
     public function Destroy()
     {
-        parent::Destroy();
-
         $instanceID = $this->InstanceID;
         $kernelDir = IPS_GetKernelDir();
         $verzeichnisName = 'Zigbee2MQTTExposes';
@@ -210,6 +208,7 @@ abstract class ModulBase extends \IPSModule
                 }
             }
         }
+        parent::Destroy();
     }
 
     /**
