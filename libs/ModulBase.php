@@ -132,7 +132,6 @@ abstract class ModulBase extends \IPSModule
         $this->ConnectParent('{C6D2AEB3-6E1F-4B2E-8E69-3A1A00246850}');
         $this->RegisterPropertyString('MQTTBaseTopic', '');
         $this->RegisterPropertyString('MQTTTopic', '');
-        $this->RegisterAttributeString('JsonFile', '');
         $this->TransactionData = [];
 
         // Vollständigen Pfad zum Verzeichnis für die Instanz-Dateien erstellen
@@ -193,7 +192,6 @@ abstract class ModulBase extends \IPSModule
         $vollerPfad = $kernelDir . $verzeichnisName . DIRECTORY_SEPARATOR;
         $dateiNamePattern = $instanceID . '.json';
         $dateiPfad = $vollerPfad . $dateiNamePattern;
-        $this->WriteAttributeString('JsonFile', $dateiPfad);
 
         $files = glob($dateiPfad);
 
@@ -202,9 +200,9 @@ abstract class ModulBase extends \IPSModule
             $oldfile = $this->ReadAttributeString('JsonFile');
             if (is_file($file)) {
                 if (unlink($file)) {
-                    $this->LogMessage(__CLASS__ . "Datei erfolgreich gelöscht: $oldfile", KL_MESSAGE);
+                    $this->LogMessage(__CLASS__ . "Datei erfolgreich gelöscht", KL_MESSAGE);
                 } else {
-                    $this->LogMessage(__CLASS__ . "Fehler beim Löschen der Datei: $file", KL_ERROR);
+                    $this->LogMessage(__CLASS__ . "Fehler beim Löschen der Datei", KL_ERROR);
                 }
             }
         }
