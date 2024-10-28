@@ -192,7 +192,7 @@ abstract class ModulBase extends \IPSModule
         $kernelDir = IPS_GetKernelDir();
         $verzeichnisName = 'Zigbee2MQTTExposes';
         $vollerPfad = $kernelDir . $verzeichnisName . DIRECTORY_SEPARATOR;
-        $dateiNamePattern = $instanceID . '_*.json';
+        $dateiNamePattern = $instanceID . '.json';
         $dateiPfad = $vollerPfad . $dateiNamePattern;
 
         $files = glob($dateiPfad);
