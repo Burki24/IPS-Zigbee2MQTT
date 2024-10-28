@@ -133,7 +133,7 @@ abstract class ModulBase extends \IPSModule
         $this->RegisterPropertyString('MQTTBaseTopic', '');
         $this->RegisterPropertyString('MQTTTopic', '');
         $this->TransactionData = [];
-        
+
         // Vollständigen Pfad zum Verzeichnis für die Instanz-Dateien erstellen
         // rtrim und DIRECTORY_SEPARATOR garantieren BS-Sicherheit (Windows/Linux)
         $neuesVerzeichnis = rtrim(IPS_GetKernelDir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'Zigbee2MQTTExposes';
@@ -178,6 +178,34 @@ abstract class ModulBase extends \IPSModule
             $this->UpdateDeviceInfo();
         }
         $this->SetStatus(IS_ACTIVE);
+    }
+
+    /**
+     *
+     *
+     */
+    public function Destroy()
+    {
+        parent::Destroy();
+
+        $instanceID = $this->InstanceID;
+        $kernelDir = IPS_GetKernelDir();
+        $verzeichnisName = 'Zigbee2MQTTExposes';
+        $vollerPfad = $kernelDir . $verzeichnisName . DIRECTORY_SEPARATOR;
+        $dateiNamePattern = $instanceID . '_*.json';
+        $dateiPfad = $vollerPfad . $dateiNamePattern;
+
+        $files = glob($dateiPfad);
+
+        foreach ($files as $file) {
+            if (is_file($file)) {
+                if (unlink($file)) {
+                    $this->LogMessage(__CLASS__ . "Datei erfolgreich gelöscht: $file", KL_MESSAGE);
+                } else {
+                    $this->LogMessage(__CLASS__ . "Fehler beim Löschen der Datei: $file", KL_ERROR);
+                }
+            }
+        }
     }
 
     /**
@@ -549,10 +577,10 @@ abstract class ModulBase extends \IPSModule
     {
         // Debug-Ausgabe des eingehenden Payloads
         $this->SendDebug(__FUNCTION__ . ' :: ' . __LINE__ . ' :: json incoming: ', json_encode($Payload), 0);
-        
+
         // Laden der gespeicherten JSON-Datei, um die bekannten Variablen zu erhalten
         $knownVariables = $this->getKnownVariables();
-        
+
         // Schleife durch die Payload-Daten
         foreach ($Payload as $key => $value) {
             // Überspringe Typ-Informationen (z.B. '_type')
@@ -742,7 +770,7 @@ abstract class ModulBase extends \IPSModule
 
         return $knownVariables;
     }
-    
+
     /**
      * Setzt den Wert einer existierenden Variable, passt den Wert entsprechend dem Variablentyp an.
      *
@@ -1205,7 +1233,7 @@ abstract class ModulBase extends \IPSModule
             $this->RegisterVariableInteger($ident, $this->Translate('Last Seen'), '~UnixTimestamp');
             return;
         }
-        
+
         // Ausnahme für 'color_mode': diese Variable wird immer angelegt
         if ($feature['property'] === 'color_mode') {
             $this->SendDebug(__FUNCTION__ . ' :: Line ' . __LINE__ . ' :: Registering special case for color_mode', json_encode($feature), 0);
@@ -1213,7 +1241,7 @@ abstract class ModulBase extends \IPSModule
             $this->RegisterVariableString($ident, $this->Translate('Color Mode'), '');
             return;
         }
-        
+
         // Setze den Typ auf den übergebenen Expose-Typ, falls vorhanden
         if ($exposeType !== null) {
             $feature['type'] = $exposeType;  // Den Typ direkt in das Feature übernehmen
