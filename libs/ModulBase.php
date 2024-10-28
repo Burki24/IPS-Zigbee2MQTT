@@ -142,12 +142,12 @@ abstract class ModulBase extends \IPSModule
         if (!is_dir($neuesVerzeichnis)) {
             // Verzeichnis erstellen mit Berechtigungen 0755
             if (mkdir($neuesVerzeichnis, 0755, true)) {
-                IPS_LogMessage(__CLASS__, "Verzeichnis '$neuesVerzeichnis' erfolgreich erstellt.");
+                $this->LogMessage(__CLASS__ . "Verzeichnis '$neuesVerzeichnis' erfolgreich erstellt.", KL_MESSAGE);
             } else {
-                IPS_LogMessage(__CLASS__, "Fehler beim Erstellen des Verzeichnisses '$neuesVerzeichnis'.");
+                $this->LogMessage(__CLASS__ . "Fehler beim Erstellen des Verzeichnisses '$neuesVerzeichnis'.", KL_ERROR);
             }
         } else {
-            IPS_LogMessage(__CLASS__, "Verzeichnis '$neuesVerzeichnis' existiert bereits.");
+            $this->LogMessage(__CLASS__ . "Verzeichnis '$neuesVerzeichnis' existiert bereits.", KL_MESSAGE);
             }
         }
 
@@ -1777,5 +1777,81 @@ abstract class ModulBase extends \IPSModule
         $this->RegisterProfileStringEx($profileName, '', '', '', $presetAssociations);
 
         return $profileName;
+    }
+
+    /**
+     * SaveExposesToJson
+     *
+     * Speichert die Exposes in einer JSON-Datei.
+     *
+     * @param array  $data   Die Daten, die gespeichert werden sollen.
+     * @param string $type   Der Typ der Instanz ('device' oder 'group'), um den Dateipfad entsprechend anzupassen.
+     *
+     * @return void
+     */
+    protected function SaveExposesToJson(array $data, string $type): void
+    {
+        // Definieren des Verzeichnisnamens
+        $verzeichnisName = 'Zigbee2MQTTExposes';
+        $kernelDir = rtrim(IPS_GetKernelDir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+        $vollerPfad = $kernelDir . $verzeichnisName . DIRECTORY_SEPARATOR;
+
+        // Sicherstellen, dass das Verzeichnis existiert
+        if (!file_exists($vollerPfad)) {
+            if (!mkdir($vollerPfad, 0755, true)) {
+                $this->LogMessage('Fehler beim Erstellen des Verzeichnisses ' . $verzeichnisName . '.', KL_ERROR);
+                return;
+            } else {
+                $this->LogMessage('Verzeichnis ' . $verzeichnisName . ' erfolgreich erstellt.', KL_MESSAGE);
+            }
+        }
+
+        // Bestimmen des Dateinamens basierend auf Typ
+        switch ($type) {
+            case 'device':
+                if (!isset($data['ieeeAddr'])) {
+                    $this->LogMessage(__FUNCTION__ . 'Fehlende "ieeeAddr" in den Daten. Datei wird nicht gespeichert.', KL_ERROR);
+                    return;
+                }
+                $instanceID = $data['symconId'] ?? $this->InstanceID;
+                $ieeeAddr = $data['ieeeAddr'];
+                // Optional: Entfernen von '0x' aus der IEEE-Adresse, falls gewünscht
+                // $ieeeAddr = ltrim($ieeeAddr, '0x');
+                $dateiName = $instanceID . '.json';
+                break;
+
+            case 'group':
+                if (!isset($data['GroupId'])) {
+                    $this->LogMessage(__FUNCTION__ . 'Fehlende "GroupId" in den Daten. Datei wird nicht gespeichert.', KL_ERROR);
+                    return;
+                }
+                $instanceID = $this->InstanceID;
+                $groupID = $data['GroupId'];
+                $dateiName = $instanceID . '.json';
+                break;
+
+            default:
+                $this->LogMessage(__FUNCTION__ . 'Unbekannter Typ \'' . $type . '\'. Datei wird nicht gespeichert.', KL_ERROR);
+                return;
+        }
+
+        // Vollständiger Pfad zur Datei
+        $dateiPfad = $vollerPfad . $dateiName;
+
+        // JSON-Daten mit Pretty-Print erstellen
+        $jsonData = json_encode($data, JSON_PRETTY_PRINT);
+        if ($jsonData === false) {
+            $this->LogMessage(__FUNCTION__ . 'Fehler beim JSON-Encoding der Daten für ' . $dateiName . '.', KL_ERROR);
+            return;
+        }
+
+        // Schreiben der JSON-Daten in die Datei
+        if (file_put_contents($dateiPfad, $jsonData) !== false) {
+            $this->LogMessage(__CLASS__ . "Datei erfolgreich geschrieben: " . $dateiPfad, KL_MESSAGE);
+            $this->SendDebug(__FUNCTION__ . ' :: ' . __LINE__, "Datei erfolgreich geschrieben: " . $dateiPfad, 0);
+        } else {
+            $this->LogMessage(__CLASS__ . "Fehler beim Schreiben von '$dateiName' im Verzeichnis '$verzeichnisName'.", KL_ERROR);
+            $this->SendDebug(__FUNCTION__ . ' :: ' . __LINE__, "Fehler beim Schreiben der Datei: " . $dateiPfad, 0);
+        }
     }
 }
