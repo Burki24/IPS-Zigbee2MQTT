@@ -1142,7 +1142,7 @@ abstract class ModulBase extends \IPSModule
      *
      * @return mixed Der konvertierte Wert entsprechend dem angegebenen Datentyp.
      */
-    private function convertByVariableType($value, $dataType)
+    private static function convertByVariableType($value, $dataType)
     {
         // Debug-Ausgabe vor der Rückgabe
         switch ($dataType) {
@@ -1162,10 +1162,6 @@ abstract class ModulBase extends \IPSModule
                 $convertedValue = (string) $value; // Fallback zu String, wenn kein gültiger Datentyp übergeben wird
                 break;
         }
-
-        // Debug-Ausgabe des konvertierten Wertes und des Datentyps
-        $this->SendDebug(__FUNCTION__ . ' :: Line ' . __LINE__ . ' :: Converted value: ', json_encode($convertedValue) . ' of type: ' . $dataType, 0);
-
         return $convertedValue; // Rückgabe des konvertierten Wertes
     }
 
