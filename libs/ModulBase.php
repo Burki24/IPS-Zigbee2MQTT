@@ -43,7 +43,6 @@ abstract class ModulBase extends \IPSModule
      * State Pattern Definition:
      * @const array STATE_PATTERN           Definiert Nomenklatur für State-Variablen
      *      Komponenten:
-     *      - PREFIX:   'Z2M_' (Symcon-Präfix)
      *      - BASE:     'state' (Basisbezeichner)
      *      - SUFFIX:   Zusatzbezeichner
      *          - NUMERIC:   _1, _2, etc.
@@ -52,7 +51,7 @@ abstract class ModulBase extends \IPSModule
      *
      *      Pattern-Typen:
      *      - MQTT:    Validiert MQTT-Payload (state, state_l1)
-     *      - SYMCON:  Validiert Symcon-Variablen (Z2M_State, Z2M_StateL1)
+     *      - SYMCON:  Validiert Symcon-Variablen (state, stateL1)
      */
     private const MQTT_BASE_TOPIC = 'MQTTBaseTopic';
     private const MQTT_TOPIC = 'MQTTTopic';
@@ -64,11 +63,11 @@ abstract class ModulBase extends \IPSModule
     private const SYMCON_GROUP_INFO = 'SymconExtension/response/getGroupInfo/';
     private const STATE_PATTERN = [
         // Basis-Komponenten
-        'PREFIX' => 'Z2M_', 'BASE' => 'state', 'SUFFIX' => ['NUMERIC' => '_[0-9]+', 'DIRECTION' => '_(?:left|right)', 'COMBINED' => '_(?:left|right)_[0-9]+'],
+        'PREFIX' => '', 'BASE' => 'state', 'SUFFIX' => ['NUMERIC' => '_[0-9]+', 'DIRECTION' => '_(?:left|right)', 'COMBINED' => '_(?:left|right)_[0-9]+'],
 
         // Fertige Pattern
         'MQTT' => '/^state(?:_[a-z0-9]+)?$/i',  // Für MQTT-Payload
-        'SYMCON' => '/^Z2M_[Ss]tate(?:(?:[Ll][0-9]+)|(?:[Ll]eft|[Rr]ight)(?:[Ll][0-9]+)?)?$/'
+        'SYMCON' => '/^[Ss]tate(?:(?:[Ll][0-9]+)|(?:[Ll]eft|[Rr]ight)(?:[Ll][0-9]+)?)?$/'
     ];
 
     /** @var array $floatUnits
@@ -143,8 +142,8 @@ abstract class ModulBase extends \IPSModule
         'color_mode' => ['type' => VARIABLETYPE_STRING, 'name' => 'Color Mode', 'profile' => '', 'enableAction' => false],
         'update' => ['type' => VARIABLETYPE_BOOLEAN, 'name' => 'Update Available', 'profile' => '~Alert', 'enableAction' => false],
         'device_temperature' => ['type' => VARIABLETYPE_FLOAT, 'name' => 'Device Temperature', 'profile' => '~Temperature', 'enableAction' => false],
-        'brightness' => ['type' => VARIABLETYPE_INTEGER, 'ident' => 'Z2M_Brightness', 'profile' => '~Intensity.100', 'scale' => 1, 'enableAction' => true],
-        'voltage' => ['type' => VARIABLETYPE_FLOAT, 'ident' => 'Z2M_Voltage', 'profile' => '~Volt', 'enableAction' => false],
+        'brightness' => ['type' => VARIABLETYPE_INTEGER, 'ident' => 'brightness', 'profile' => '~Intensity.100', 'scale' => 1, 'enableAction' => true],
+        'voltage' => ['type' => VARIABLETYPE_FLOAT, 'ident' => 'voltage', 'profile' => '~Volt', 'enableAction' => false],
     ];
 
     /**
@@ -162,8 +161,8 @@ abstract class ModulBase extends \IPSModule
      * @var array $stateDefinitions Array mit Status-Definitionen
      */
     protected static $stateDefinitions = [
-        'Z2M_AutoLock' => ['type' => 'automode', 'dataType' => VARIABLETYPE_STRING, 'values' => ['AUTO', 'MANUAL']],
-        'Z2M_ValveState' => ['type' => 'valve', 'dataType' => VARIABLETYPE_STRING, 'values' => ['OPEN', 'CLOSED']],
+        'auto_lock' => ['type' => 'automode', 'dataType' => VARIABLETYPE_STRING, 'values' => ['AUTO', 'MANUAL']],
+        'valve_state' => ['type' => 'valve', 'dataType' => VARIABLETYPE_STRING, 'values' => ['OPEN', 'CLOSED']],
     ];
 
     /** @var array $stringVariablesNoResponse
@@ -177,10 +176,10 @@ abstract class ModulBase extends \IPSModule
      *   angezeigt werden soll.
      *
      * Beispiel:
-     * - 'Z2M_Effect': Aktualisiert den zuletzt gesetzten Effekt.
+     * - 'effect': Aktualisiert den zuletzt gesetzten Effekt.
      */
     protected static $stringVariablesNoResponse = [
-        'Z2M_Effect',
+        'effect',
     ];
 
 // Kernfunktionen
@@ -296,7 +295,7 @@ abstract class ModulBase extends \IPSModule
      * - Status-Variablen: ON/OFF und andere Zustände
      * - Standard-Variablen: Allgemeine Werteänderungen
      *
-     * @param string $ident Identifikator der Variable (z.B. 'Z2M_State', 'UpdateInfo')
+     * @param string $ident Identifikator der Variable (z.B. 'state', 'UpdateInfo')
      * @param mixed $value Neuer Wert für die Variable
      *
      * @return void
@@ -319,7 +318,7 @@ abstract class ModulBase extends \IPSModule
             // Behandelt String-Variablen ohne Rückmeldung
             in_array($ident, self::$stringVariablesNoResponse) => $this->handleStringVariableNoResponse($ident, $value),
             // Behandelt Farbvariablen
-            strpos($ident, 'Z2M_Color') === 0 => $this->handleColorVariable($ident, $value),
+            strpos($ident, 'color') === 0 => $this->handleColorVariable($ident, $value),
             // Behandelt Status-Variablen
             preg_match(self::STATE_PATTERN['SYMCON'], $ident) => $this->handleStateVariable($ident, $value),
             // Behandelt Standard-Variablen
@@ -389,6 +388,80 @@ abstract class ModulBase extends \IPSModule
         // Verarbeitet Payload
         return $this->processPayload($messageData);
     }
+
+    public function Migrate($JSONData)
+    {
+        // Zuerst immer den Aufruf an die Elternklasse durchführen!
+        parent::Migrate($JSONData);
+
+        // Wir machen dann unsere eigene Ident-Anpassung:
+        // 1) Suche alle Kinder-Objekte dieser Instanz
+        // 2) Prüfe, ob ihr Ident z. B. mit "Z2M_" beginnt
+        // 3) Bilde den neuen Ident (snake_case) und setze ihn
+
+        $childrenIDs = IPS_GetChildrenIDs($this->InstanceID);
+        foreach ($childrenIDs as $childID) {
+            // Nur weitermachen, wenn es sich um eine Variable handelt
+            $obj = IPS_GetObject($childID);
+            if ($obj['ObjectType'] !== OBJECTTYPE_VARIABLE) {
+                continue;
+            }
+
+            $oldIdent = $obj['ObjectIdent'];
+            if ($oldIdent == '') {
+                // Hat keinen Ident, also ignorieren
+                continue;
+            }
+
+            // Wenn Du nur solche Idents anpassen möchtest, die mit 'Z2M_' beginnen:
+            if (substr($oldIdent, 0, 4) !== 'Z2M_') {
+                // Überspringen
+                continue;
+            }
+
+            // Neuen Ident bilden
+            $newIdent = $this->convertToSnakeCase($oldIdent);
+
+            // Versuchen zu setzen
+            $result = @IPS_SetIdent($childID, $newIdent);
+            if ($result === false) {
+                IPS_LogMessage(__FUNCTION__, "Fehler: Ident '{$newIdent}' konnte nicht für Variable #{$childID} gesetzt werden!");
+            } else {
+                IPS_LogMessage(__FUNCTION__, "Variable #{$childID}: '{$oldIdent}' wurde geändert zu '{$newIdent}'");
+            }
+        }
+    }
+
+    /**
+     * Diese Hilfsfunktion entfernt das Prefix "Z2M_" und
+     * wandelt CamelCase in lower_snake_case um.
+     *
+     * Beispiele:
+     * - "color_temp" -> "color_temp"
+     * - "brightnessABC" -> "brightness_a_b_c"
+     */
+    private function convertToSnakeCase(string $oldIdent): string
+    {
+        // 1) Prefix "Z2M_" entfernen (optional, wenn Du das möchtest)
+        $withoutPrefix = preg_replace('/^Z2M_/', '', $oldIdent);
+
+        // 2) Vor jedem Großbuchstaben einen Unterstrich einfügen
+        //    Bsp: "ColorTemp" -> "_Color_Temp"
+        //    Bsp: "BrightnessABC" -> "_Brightness_A_B_C"
+        $withUnderscore = preg_replace('/([A-Z])/', '_$1', $withoutPrefix);
+
+        // 3) Falls jetzt am Anfang ein "_" ist, entfernen
+        $withUnderscore = ltrim($withUnderscore, '_');
+
+        // 4) Mehrere aufeinanderfolgende Unterstriche auf einen reduzieren
+        $withUnderscore = preg_replace('/_+/', '_', $withUnderscore);
+
+        // 5) Jetzt alles in kleingeschrieben
+        $snakeCase = strtolower($withUnderscore);
+
+        return $snakeCase;
+    }
+
 
 // MQTT Kommunikation
 
@@ -512,8 +585,8 @@ abstract class ModulBase extends \IPSModule
                 ]
             );
         }
-        $this->RegisterVariableBoolean('Z2M_Status', $this->Translate('Availability'), 'Z2M.DeviceStatus');
-        $this->SetValue('Z2M_Status', $messageData['Payload'] == '{"state":"online"}');
+        $this->RegisterVariableBoolean('device_status', $this->Translate('Availability'), 'Z2M.DeviceStatus');
+        $this->SetValue('device_status', $messageData['Payload'] == '{"state":"online"}');
         return true;
     }
 
@@ -668,22 +741,22 @@ abstract class ModulBase extends \IPSModule
      *
      * Unterstützte Variablentypen:
      * 1. State-Variablen:
-     *    - Z2M_State: ON/OFF -> true/false
-     *    - Z2M_StateL1: Nummerierte States
-     *    - Z2M_StateLeft: Richtungs-States
-     *    - Z2M_StateLeftL1: Kombinierte States
+     *    - state: ON/OFF -> true/false
+     *    - stateL1: Nummerierte States
+     *    - stateLeft: Richtungs-States
+     *    - stateLeftL1: Kombinierte States
      *
      * 2. Spezielle Variablen:
-     *    - Z2M_Color: RGB-Farbwerte
-     *    - Z2M_ColorTemp: Farbtemperatur mit Kelvin-Konvertierung
-     *    - Z2M_Preset: Vordefinierte Werte
+     *    - color: RGB-Farbwerte
+     *    - color_temp: Farbtemperatur mit Kelvin-Konvertierung
+     *    - preset: Vordefinierte Werte
      *
      * 3. Standard-Variablen:
      *    - Boolean: Automatische ON/OFF Konvertierung
      *    - Integer/Float: Typkonvertierung mit Einheitenbehandlung
      *    - String: Direkte Wertzuweisung
      *
-     * @param string $ident Identifier der Variable (z.B. "Z2M_State", "Z2M_ColorTemp")
+     * @param string $ident Identifier der Variable (z.B. "state", "color_temp")
      * @param mixed $value Zu setzender Wert
      *                    Bool: true/false oder "ON"/"OFF"
      *                    Int/Float: Numerischer Wert
@@ -696,15 +769,15 @@ abstract class ModulBase extends \IPSModule
      *
      * @example
      * // States
-     * SetValue("Z2M_State", "ON");         // Setzt bool true
-     * SetValue("Z2M_StateL1", false);      // Setzt "OFF"
+     * SetValue("state", "ON");         // Setzt bool true
+     * SetValue("stateL1", false);      // Setzt "OFF"
      *
      * // Farben & Temperatur
-     * SetValue("Z2M_ColorTemp", 4000);     // Setzt Farbtemp + Kelvin
-     * SetValue("Z2M_Color", 0xFF0000);     // Setzt Rot
+     * SetValue("color_temp", 4000);     // Setzt Farbtemp + Kelvin
+     * SetValue("color", 0xFF0000);     // Setzt Rot
      *
      * // Profile
-     * SetValue("Z2M_Mode", "auto");        // Nutzt Profilzuordnung
+     * SetValue("mode", "auto");        // Nutzt Profilzuordnung
      */
     protected function SetValue($ident, $value)
     {
@@ -745,8 +818,8 @@ abstract class ModulBase extends \IPSModule
         parent::SetValue($ident, $adjustedValue);
 
         // Spezialbehandlung für ColorTemp
-        if ($ident === 'Z2M_ColorTemp') {
-            $kelvinIdent = 'Z2M_ColorTempKelvin';
+        if ($ident === 'color_temp') {
+            $kelvinIdent = 'color_temp_kelvin';
             $kelvinValue = $this->convertMiredToKelvin($value);
             $this->SetValueDirect($kelvinIdent, $kelvinValue);
         }
@@ -783,10 +856,10 @@ abstract class ModulBase extends \IPSModule
      *
      * @example
      * // Boolean setzen
-     * SetValueDirect("Z2M_State", true);
+     * SetValueDirect("state", true);
      *
      * // Array als JSON
-     * SetValueDirect("Z2M_Data", ["temp" => 22]);
+     * SetValueDirect("data", ["temp" => 22]);
      */
     protected function SetValueDirect($ident, $value): void
     {
@@ -965,7 +1038,7 @@ abstract class ModulBase extends \IPSModule
             $this->SendDebug(__FUNCTION__, 'Array-Inhalt: ' . json_encode($value), 0);
 
             // Spezielle Behandlung für Farbwerte
-            if (strpos($ident, 'Z2M_Color') === 0) {
+            if (strpos($ident, 'color') === 0) {
                 $this->handleColorVariable($ident, $value);
             }
 
@@ -1005,7 +1078,7 @@ abstract class ModulBase extends \IPSModule
             $value = $value ? 'ON' : 'OFF';
         }
         // light-Brightness kann immer das Profil ~Intensity.100 haben
-        if ($ident === 'Z2M_Brightness') {
+        if ($ident === 'brightness') {
             // Konvertiere 0-100 zurück zu Gerätebereich
             $max_brightness = $this->getBrightnessMaxValue(); // Aus Expose-Daten holen
             $deviceValue = $this->normalizeValueToRange($value, 0, 100, 0, $max_brightness);
@@ -1041,8 +1114,8 @@ abstract class ModulBase extends \IPSModule
      *
      * @example
      * // Einfacher ON/OFF State
-     * handleStateVariable("Z2M_State", true); // Sendet ON
-     * handleStateVariable("Z2M_State", false); // Sendet OFF
+     * handleStateVariable("state", true); // Sendet ON
+     * handleStateVariable("state", false); // Sendet OFF
      */
     private function handleStateVariable(string $ident, $value): bool
     {
@@ -1050,9 +1123,7 @@ abstract class ModulBase extends \IPSModule
 
         // Prüfe auf Standard-State Pattern und konvertiere zu MQTT-Payload-Key
         if (preg_match(self::STATE_PATTERN['SYMCON'], $ident)) {
-            // Konvertiere Z2M_state zu state für MQTT-Payload
-            $payloadKey = self::convertIdentToPayloadKey($ident);
-            $payload = [$payloadKey => $value ? 'ON' : 'OFF'];
+            $payload = [$ident => $value ? 'ON' : 'OFF'];
             $this->SendDebug(__FUNCTION__, "State-Payload wird gesendet: " . json_encode($payload), 0);
             $this->SendSetCommand($payload);
             $this->SetValueDirect($ident, $value ? 'ON' : 'OFF');
@@ -1065,8 +1136,7 @@ abstract class ModulBase extends \IPSModule
             if (isset($stateInfo['values'])) {
                 $index = is_bool($value) ? (int)$value : $value;
                 if (isset($stateInfo['values'][$index])) {
-                    $payloadKey = str_replace('Z2M_', '', $ident);
-                    $payload = [$payloadKey => $stateInfo['values'][$index]];
+                    $payload = [$ident => $stateInfo['values'][$index]];
                     $this->SendDebug(__FUNCTION__, "Vordefinierter State-Payload wird gesendet: " . json_encode($payload), 0);
                     $this->SendSetCommand($payload);
                     $this->SetValueDirect($ident, $stateInfo['values'][$index]);
@@ -1100,7 +1170,7 @@ abstract class ModulBase extends \IPSModule
     private function handleColorVariable($ident, $value): bool
     {
         $handled = match ($ident) {
-            'Z2M_Color' => function() use ($value) {
+            'color' => function() use ($value) {
                 $this->SendDebug(__FUNCTION__, 'Color Value: ' . json_encode($value), 0);
                 if (is_int($value)) {
                     // Umrechnung des Integer-Werts in x und y
@@ -1121,30 +1191,30 @@ abstract class ModulBase extends \IPSModule
 
                         // Umrechnung der x und y Werte in einen HEX-Wert mit Helligkeit
                         $hexValue = $this->XYToHex($value['color']['x'], $value['color']['y'], $brightness);
-                        $this->SetValueDirect('Z2M_Color', $hexValue);
+                        $this->SetValueDirect('color', $hexValue);
                     } elseif (isset($value['x']) && isset($value['y'])) {
                         // Direkte x/y Werte
                         $brightness = $value['brightness'] ?? 255;
                         $hexValue = $this->XYToHex($value['x'], $value['y'], $brightness);
-                        $this->SetValueDirect('Z2M_Color', $hexValue);
+                        $this->SetValueDirect('color', $hexValue);
                     }
                 } else {
-                    $this->SendDebug(__FUNCTION__, 'Ungültiger Wert für Z2M_Color: ' . json_encode($value), 0);
+                    $this->SendDebug(__FUNCTION__, 'Ungültiger Wert für color: ' . json_encode($value), 0);
                     return false;
                 }
                 return true;
             },
-            'Z2M_ColorHS' => function() use ($value) {
+            'color_hs' => function() use ($value) {
                 $this->SendDebug(__FUNCTION__, 'Color HS', 0);
                 $this->setColor($value, 'hs');
                 return true;
             },
-            'Z2M_ColorRGB' => function() use ($value) {
+            'color_rgb' => function() use ($value) {
                 $this->SendDebug(__FUNCTION__, 'Color RGB', 0);
                 $this->setColor($value, 'cie', 'color_rgb');
                 return true;
             },
-            'Z2M_ColorTempKelvin' => function() use ($value) {
+            'color_temp_kelvin' => function() use ($value) {
                 // Konvertiere Kelvin zu Mired
                 $convertedValue = $this->convertKelvinToMired($value);
                 $payloadKey = 'color_temp'; // Zigbee2MQTT erwartet immer color_temp als Key
@@ -1157,15 +1227,14 @@ abstract class ModulBase extends \IPSModule
                 $this->SendSetCommand($payload);
 
                 // Aktualisiere auch die Mired-Variable
-                $this->SetValueDirect('Z2M_ColorTemp', $convertedValue);
+                $this->SetValueDirect('color_temp', $convertedValue);
 
                 return true;
             },
-            'Z2M_ColorTemp' => function() use ($value) {
+            'color_temp' => function() use ($value) {
                 $convertedValue = $this->convertKelvinToMired($value);
-                $payloadKey = self::convertIdentToPayloadKey('Z2M_ColorTemp');
                 $this->SendDebug(__FUNCTION__, 'Converted Color Temp: ' . $convertedValue, 0);
-                $payload = [$payloadKey => $convertedValue];
+                $payload = ['color_temp' => $convertedValue];
                 $this->SendSetCommand($payload);
                 return true;
             },
@@ -1207,8 +1276,8 @@ abstract class ModulBase extends \IPSModule
         $this->SetValueDirect($ident, $value);
 
         // Aktualisiere die Farbtemperatur-Kelvin-Variable, wenn die Preset-Variable für Farbtemperatur geändert wird
-        if ($mainIdent === 'Z2M_ColorTemp') {
-            $kelvinIdent = $mainIdent . 'Kelvin';
+        if ($mainIdent === 'color_temp') {
+            $kelvinIdent = $mainIdent . '_kelvin';
             $kelvinValue = $this->convertMiredToKelvin($value);
             $this->SetValueDirect($kelvinIdent, $kelvinValue);
         }
@@ -1512,11 +1581,11 @@ abstract class ModulBase extends \IPSModule
      * 3. Debug-Ausgabe des konvertierten Werts
      *
      * Unterstützte Variablentypen:
-     * - Z2M_LastSeen: Konvertiert Millisekunden zu Sekunden
-     * - Z2M_ColorMode: Wandelt Farbmodus in Großbuchstaben (hs->HS, xy->XY)
-     * - Z2M_ColorTempKelvin: Rechnet Kelvin in Mired um (1.000.000/K)
+     * - last_seen: Konvertiert Millisekunden zu Sekunden
+     * - color_mode: Wandelt Farbmodus in Großbuchstaben (hs->HS, xy->XY)
+     * - color_temp_kelvin: Rechnet Kelvin in Mired um (1.000.000/K)
      *
-     * @param string $ident Identifikator der Variable (Z2M_LastSeen, Z2M_ColorMode, Z2M_ColorTempKelvin)
+     * @param string $ident Identifikator der Variable (last_seen, color_mode, color_temp_kelvin)
      * @param mixed $value Zu konvertierender Wert
      *                    - LastSeen: Integer (Millisekunden)
      *                    - ColorMode: String (hs, xy)
@@ -1530,40 +1599,40 @@ abstract class ModulBase extends \IPSModule
      *
      * @example
      * // LastSeen konvertieren
-     * adjustSpecialValue("Z2M_LastSeen", 1600000000000); // Returns: 1600000000
+     * adjustSpecialValue("last_seen", 1600000000000); // Returns: 1600000000
      *
      * // ColorMode konvertieren
-     * adjustSpecialValue("Z2M_ColorMode", "hs"); // Returns: "HS"
+     * adjustSpecialValue("color_mode", "hs"); // Returns: "HS"
      *
      * // Kelvin zu Mired
-     * adjustSpecialValue("Z2M_ColorTempKelvin", 4000); // Returns: "250"
+     * adjustSpecialValue("color_temp_kelvin", 4000); // Returns: "250"
      */
     private function adjustSpecialValue($ident, $value)
     {
         $debugValue = is_array($value) ? json_encode($value) : $value;
         $this->SendDebug(__FUNCTION__, 'Processing special variable: ' . $ident . ' with value: ' . $debugValue, 0);        switch ($ident) {
-            case 'Z2M_LastSeen':
+            case 'last_seen':
                 // Umrechnung von Millisekunden auf Sekunden
                 $adjustedValue = intval($value / 1000);
                 $this->SendDebug(__FUNCTION__, 'Converted value: ' . $adjustedValue, 0);
                 return $adjustedValue;
-            case 'Z2M_ColorMode':
+            case 'color_mode':
                 // Konvertierung von 'hs' zu 'HS' und 'xy' zu 'XY'
                 $adjustedValue = strtoupper($value);
                 $this->SendDebug(__FUNCTION__, 'Converted value: ' . $adjustedValue, 0);
                 return $adjustedValue;
-            case 'Z2M_ColorTempKelvin':
+            case 'color_temp_kelvin':
                 // Umrechnung von Kelvin zu Mired
                 $adjustedValue = strval(intval(round(1000000 / $value, 0)));
                 $this->SendDebug(__FUNCTION__, 'Converted value: ' . $adjustedValue, 0);
                 return $adjustedValue;
-            case 'Z2M_Brightness':
+            case 'brightness':
                 // Konvertiere auf 0-100 Skala
                 $max_brightness = $this->getBrightnessMaxValue();
                 $adjustedValue = $this->normalizeValueToRange($value, 0, $max_brightness, 0, 100);
                 $this->SendDebug(__FUNCTION__, 'Converted brightness value: ' . $adjustedValue, 0);
                 return $adjustedValue;
-            case 'Z2M_Voltage':
+            case 'voltage':
                 // Konvertiere mV zu V
                 $adjustedValue = $this->convertMillivoltToVolt($value);
                 $this->SendDebug(__FUNCTION__, 'Converted voltage value: ' . $adjustedValue, 0);
@@ -1605,10 +1674,7 @@ abstract class ModulBase extends \IPSModule
      */
     private static function convertPropertyToIdent($property)
     {
-        $ident = 'Z2M_';
-        $words = explode('_', strtolower($property)); // Zerlegt den String in einzelne Wörter
-        $camelCased = array_map('ucfirst', $words);   // Wandelt die Wörter in CamelCase um
-        return $ident . implode('', $camelCased);     // Fügt die Wörter zusammen und gibt den Identifikator zurück
+        return strtolower($property);
     }
 
     /**
@@ -2241,11 +2307,11 @@ abstract class ModulBase extends \IPSModule
             // Neues Profil anlegen
             if ($variableType === 'float') {
                 if (!$this->RegisterProfileFloatEx($profileName, '', '', '', [])) {
-                    IPS_LogMessage(__CLASS__, "Fehler beim Erstellen des Float-Profils: $profileName");
+                    $this->LogMessage(__FUNCTION__ . ' :: ' . __LINE__ .  " : Fehler beim Erstellen des Float-Profils: $profileName", KL_ERROR);
                 }
             } else {
                 if (!$this->RegisterProfileIntegerEx($profileName, '', '', '', [])) {
-                    IPS_LogMessage(__CLASS__, "Fehler beim Erstellen des Integer-Profils: $profileName");
+                    $this->LogMessage(__FUNCTION__ . ' :: ' . __LINE__ .  " : Fehler beim Erstellen des Integer-Profils: $profileName", KL_ERROR);
                 }
             }
         }
@@ -2669,9 +2735,9 @@ abstract class ModulBase extends \IPSModule
             $this->SendDebug(__FUNCTION__, 'Set EnableAction for ident: ' . $ident . ' to: true', 0);
         }
 
-        // Zusätzliche Registrierung der color_temp_kelvin Variable, wenn Z2M_ColorTemp registriert wird
-        if ($ident === 'Z2M_ColorTemp') {
-            $kelvinIdent = $ident . 'Kelvin';
+        // Zusätzliche Registrierung der color_temp_kelvin Variable, wenn color_temp registriert wird
+        if ($ident === 'color_temp') {
+            $kelvinIdent = $ident . '_kelvin';
             $this->SendDebug(__FUNCTION__, 'TWColor Profile exists: ' . (IPS_VariableProfileExists('~TWColor') ? 'yes' : 'no'), 0);
             $this->SendDebug(__FUNCTION__, 'Registering Kelvin variable with ident: ' . $kelvinIdent, 0);
 
@@ -2709,19 +2775,19 @@ abstract class ModulBase extends \IPSModule
     {
         switch ($feature['name']) {
             case 'color_xy':
-                $this->RegisterVariableInteger('Z2M_Color', $this->Translate($this->convertLabelToName('color')), 'HexColor');
-                $this->EnableAction('Z2M_Color');
-                $this->SendDebug(__FUNCTION__ . ' :: Line ' . __LINE__ . ' :: Creating composite color_xy', 'Z2M_Color', 0);
+                $this->RegisterVariableInteger('color', $this->Translate($this->convertLabelToName('color')), 'HexColor');
+                $this->EnableAction('color');
+                $this->SendDebug(__FUNCTION__ . ' :: Line ' . __LINE__ . ' :: Creating composite color_xy', 'color', 0);
                 break;
             case 'color_hs':
-                $this->RegisterVariableInteger('Z2M_ColorHS', $this->Translate($this->convertLabelToName('color_hs')), 'HexColor');
-                $this->EnableAction('Z2M_ColorHS');
-                $this->SendDebug(__FUNCTION__ . ' :: Line ' . __LINE__ . ' :: Creating composite color_hs', 'Z2M_ColorHS', 0);
+                $this->RegisterVariableInteger('color_hs', $this->Translate($this->convertLabelToName('color_hs')), 'HexColor');
+                $this->EnableAction('color_hs');
+                $this->SendDebug(__FUNCTION__ . ' :: Line ' . __LINE__ . ' :: Creating composite color_hs', 'color_hs', 0);
                 break;
             case 'color_rgb':
-                $this->RegisterVariableInteger('Z2M_ColorRGB', $this->Translate($this->convertLabelToName('color_rgb')), 'HexColor');
-                $this->EnableAction('Z2M_ColorRGB');
-                $this->SendDebug(__FUNCTION__ . ' :: Line ' . __LINE__ . ' :: Creating composite color_rgb', 'Z2M_ColorRGB', 0);
+                $this->RegisterVariableInteger('color_rgb', $this->Translate($this->convertLabelToName('color_rgb')), 'HexColor');
+                $this->EnableAction('color_rgb');
+                $this->SendDebug(__FUNCTION__ . ' :: Line ' . __LINE__ . ' :: Creating composite color_rgb', 'color_rgb', 0);
                 break;
             default:
                 $this->SendDebug(__FUNCTION__ . ' :: Line ' . __LINE__ . ' :: Unhandled composite type', $feature['name'], 0);
@@ -2762,7 +2828,7 @@ abstract class ModulBase extends \IPSModule
         $profileName = $this->createPresetProfile($presets, $label, $variableType, $feature);
 
         // Variable registrieren
-        $ident = self::convertPropertyToIdent($feature['property']) . 'Presets';
+        $ident = self::convertPropertyToIdent($feature['property']) . '_presets';
         $this->SendDebug(__FUNCTION__, 'Preset ident: ' . $ident, 0);
         $label = $this->Translate($feature['name']) . ' Presets';
         $formattedLabel = $this->convertLabelToName($label);
@@ -2842,9 +2908,9 @@ abstract class ModulBase extends \IPSModule
     /**
      * Prüft und liefert die Konfiguration für State-basierte Features.
      *
-     * Diese Methode analysiert ein Feature und bestimmt, ob es sich um ein State-Feature handelt.  
+     * Diese Methode analysiert ein Feature und bestimmt, ob es sich um ein State-Feature handelt.
      * Sie prüft zwei Szenarien:
-     * 1. Standard State-Pattern (z.B. "state", "state_left") 
+     * 1. Standard State-Pattern (z.B. "state", "state_left")
      * 2. Vordefinierte States aus stateDefinitions
      *
      * Die zurückgegebene Konfiguration enthält:
@@ -2858,7 +2924,7 @@ abstract class ModulBase extends \IPSModule
      * @param string $featureId Feature-Identifikator (z.B. 'state', 'state_left')
      * @param array|null $feature Optionales Feature-Array mit weiteren Eigenschaften wie:
      *                           - access: Zugriffsrechte für Schreiboperationen
-     * 
+     *
      * @return array|null Array mit State-Konfiguration oder null wenn kein State-Feature
      *
      * @example
@@ -2867,23 +2933,20 @@ abstract class ModulBase extends \IPSModule
      * // Ergebnis: ['type' => 'switch', 'values' => ['ON', 'OFF'], ...]
      *
      * // Vordefinierter state
-     * $config = $this->getStateConfiguration('Z2M_ValveState');
+     * $config = $this->getStateConfiguration('valve_state');
      * // Ergebnis: Konfiguration aus stateDefinitions
      */
     private function getStateConfiguration(string $featureId, ?array $feature = null): ?array
     {
-        // Entferne Z2M_ falls vorhanden für die Prüfung
-        $rawFeatureId = str_replace('Z2M_', '', $featureId);
-
         // Basis state-Pattern
         $statePattern = '/^state(?:_[a-z0-9]+)?$/i';
 
-        if (preg_match($statePattern, $rawFeatureId)) {
+        if (preg_match($statePattern, $featureId)) {
             // Prüfe Schreibzugriff im Feature
             $isSwitchable = isset($feature['access']) && ($feature['access'] & 0b010) != 0;
 
             // Nutze existierende Funktion für Identifier-Konvertierung
-            $normalizedId = self::convertPropertyToIdent($rawFeatureId);
+            $normalizedId = self::convertPropertyToIdent($featureId);
 
             $this->SendDebug(__FUNCTION__, "State-Konfiguration für: $normalizedId", 0);
 
