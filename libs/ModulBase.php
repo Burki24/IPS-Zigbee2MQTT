@@ -389,12 +389,23 @@ abstract class ModulBase extends \IPSModule
         return $this->processPayload($messageData);
     }
 
+    /**
+     * Führt eine Migration von Objekt-Idents durch, indem es Kinder-Objekte dieser Instanz durchsucht,
+     * auf definierte Kriterien überprüft und bei Bedarf umbenennt.
+     *
+     * Ruft zuerst die Elternklasse-Methode auf und bearbeitet anschließend die Idents:
+     * - Überprüfung, ob der Ident mit "Z2M_" beginnt
+     * - Konvertierung des Ident ins snake_case
+     * - Loggt sowohl Fehler als auch erfolgreiche Änderungen
+     *
+     * @param string $JSONData JSON-Daten zur Steuerung der Migration (derzeit nicht verwendet)
+     * @return void Gibt keinen Wert zurück
+     */
     public function Migrate($JSONData)
     {
         // Zuerst immer den Aufruf an die Elternklasse durchführen!
         parent::Migrate($JSONData);
 
-        // Wir machen dann unsere eigene Ident-Anpassung:
         // 1) Suche alle Kinder-Objekte dieser Instanz
         // 2) Prüfe, ob ihr Ident z. B. mit "Z2M_" beginnt
         // 3) Bilde den neuen Ident (snake_case) und setze ihn
@@ -413,7 +424,7 @@ abstract class ModulBase extends \IPSModule
                 continue;
             }
 
-            // Wenn Du nur solche Idents anpassen möchtest, die mit 'Z2M_' beginnen:
+            // Nur solche Idents, die mit 'Z2M_' beginnen:
             if (substr($oldIdent, 0, 4) !== 'Z2M_') {
                 // Überspringen
                 continue;
@@ -425,9 +436,9 @@ abstract class ModulBase extends \IPSModule
             // Versuchen zu setzen
             $result = @IPS_SetIdent($childID, $newIdent);
             if ($result === false) {
-                IPS_LogMessage(__FUNCTION__, "Fehler: Ident '{$newIdent}' konnte nicht für Variable #{$childID} gesetzt werden!");
+                $this->LogMessage(__FUNCTION__ . " : Fehler: Ident '{$newIdent}' konnte nicht für Variable #{$childID} gesetzt werden!", KL_ERROR);
             } else {
-                IPS_LogMessage(__FUNCTION__, "Variable #{$childID}: '{$oldIdent}' wurde geändert zu '{$newIdent}'");
+                $this->LogMessage(__FUNCTION__ . " : Variable #{$childID}: '{$oldIdent}' wurde geändert zu '{$newIdent}'", KL_NOTIFY);
             }
         }
     }
@@ -442,7 +453,7 @@ abstract class ModulBase extends \IPSModule
      */
     private function convertToSnakeCase(string $oldIdent): string
     {
-        // 1) Prefix "Z2M_" entfernen (optional, wenn Du das möchtest)
+        // 1) Prefix "Z2M_" entfernen
         $withoutPrefix = preg_replace('/^Z2M_/', '', $oldIdent);
 
         // 2) Vor jedem Großbuchstaben einen Unterstrich einfügen
