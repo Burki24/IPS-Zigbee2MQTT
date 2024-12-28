@@ -403,6 +403,9 @@ abstract class ModulBase extends \IPSModule
      */
     public function Migrate($JSONData)
     {
+        // Flag für laufende Migration setzen
+        $this->SetBuffer('migrating', 'true');
+
         // Zuerst immer den Aufruf an die Elternklasse durchführen!
         parent::Migrate($JSONData);
 
@@ -441,6 +444,8 @@ abstract class ModulBase extends \IPSModule
                 $this->LogMessage(__FUNCTION__ . " : Variable #{$childID}: '{$oldIdent}' wurde geändert zu '{$newIdent}'", KL_NOTIFY);
             }
         }
+        // Migration abgeschlossen - Flag zurücksetzen
+        $this->SetBuffer('migrating', 'false');
     }
 
     /**
@@ -970,6 +975,11 @@ abstract class ModulBase extends \IPSModule
      */
     private function getOrRegisterVariable($ident, $variableProps = null, $formattedLabel = null)
     {
+        // Migration-Check am Anfang
+        if ($this->GetBuffer('migrating') === 'true') {
+            return false;
+        }
+
         $backtrace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2);
         $caller = isset($backtrace[1]['function']) ? $backtrace[1]['function'] : 'unknown';
 
@@ -2622,6 +2632,11 @@ abstract class ModulBase extends \IPSModule
      */
     private function registerVariable($feature, $exposeType = null)
     {
+        // Wenn Migration läuft, keine neue Variable anlegen
+        if ($this->GetBuffer('migrating') === 'true') {
+            return;
+        }
+
         $featureId = is_array($feature) ? $feature['property'] : $feature;
         $this->SendDebug(__FUNCTION__ . "Registriere Variable für Property: ", $featureId, 0);
 
@@ -2784,6 +2799,11 @@ abstract class ModulBase extends \IPSModule
      */
     private function registerColorVariable($ident, $feature)
     {
+        // Migration-Check am Anfang
+        if ($this->GetBuffer('migrating') === 'true') {
+            return;
+        }
+
         switch ($feature['name']) {
             case 'color_xy':
                 $this->RegisterVariableInteger('color', $this->Translate($this->convertLabelToName('color')), 'HexColor');
@@ -2835,6 +2855,11 @@ abstract class ModulBase extends \IPSModule
      */
     private function registerPresetVariables(array $presets, string $label, string $variableType, array $feature)
     {
+        // Migration-Check am Anfang
+        if ($this->GetBuffer('migrating') === 'true') {
+            return;
+        }
+
         $this->SendDebug(__FUNCTION__, 'Registering preset variables for: ' . $label, 0);
         $profileName = $this->createPresetProfile($presets, $label, $variableType, $feature);
 
@@ -2867,6 +2892,11 @@ abstract class ModulBase extends \IPSModule
      */
     private function registerSpecialVariable($feature)
     {
+        // Migration-Check am Anfang
+        if ($this->GetBuffer('migrating') === 'true') {
+            return false;
+        }
+
         $property = $feature['property'];
         $this->SendDebug(__FUNCTION__, sprintf('Checking special case for %s: %s', $property, json_encode($feature)), 0);
 
