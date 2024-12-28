@@ -69,6 +69,10 @@ abstract class ModulBase extends \IPSModule
         'MQTT' => '/^state(?:_[a-z0-9]+)?$/i',  // Für MQTT-Payload
         'SYMCON' => '/^[Ss]tate(?:(?:[Ll][0-9]+)|(?:[Ll]eft|[Rr]ight)(?:[Ll][0-9]+)?)?$/'
     ];
+    private const BUFFER_KEYS = [
+        'PROCESSING_MIGRATION' => 'processingMigration',
+        'MQTT_SUSPENDED' => 'mqttSuspended'
+    ];
 
     /** @var array $floatUnits
      * Erkennung Float
@@ -359,6 +363,10 @@ abstract class ModulBase extends \IPSModule
      */
     public function ReceiveData($JSONString)
     {
+        // Während Migration keine MQTT Nachrichten verarbeiten
+        if($this->GetBuffer(self::BUFFER_KEYS['MQTT_SUSPENDED']) === 'true') {
+            return '';
+        }
         // Instanz im CREATE-Status überspringen
         if ($this->GetStatus() == self::STATUS_CREATING) {
             return '';
@@ -404,7 +412,8 @@ abstract class ModulBase extends \IPSModule
     public function Migrate($JSONData)
     {
         // Flag für laufende Migration setzen
-        $this->SetBuffer('migrating', 'true');
+        $this->SetBuffer(self::BUFFER_KEYS['MQTT_SUSPENDED'], 'true');
+        $this->SetBuffer(self::BUFFER_KEYS['PROCESSING_MIGRATION'], 'true');
 
         // Zuerst immer den Aufruf an die Elternklasse durchführen!
         parent::Migrate($JSONData);
@@ -444,8 +453,10 @@ abstract class ModulBase extends \IPSModule
                 $this->LogMessage(__FUNCTION__ . " : Variable #{$childID}: '{$oldIdent}' wurde geändert zu '{$newIdent}'", KL_NOTIFY);
             }
         }
-        // Migration abgeschlossen - Flag zurücksetzen
-        $this->SetBuffer('migrating', 'false');
+
+        // Flag für beendete Migration wieder setzen
+        $this->SetBuffer(self::BUFFER_KEYS['MQTT_SUSPENDED'], 'false');
+        $this->SetBuffer(self::BUFFER_KEYS['PROCESSING_MIGRATION'], 'false');
     }
 
     /**
@@ -975,8 +986,8 @@ abstract class ModulBase extends \IPSModule
      */
     private function getOrRegisterVariable($ident, $variableProps = null, $formattedLabel = null)
     {
-        // Migration-Check am Anfang
-        if ($this->GetBuffer('migrating') === 'true') {
+        // Während Migration keine Variablen erstellen
+        if($this->GetBuffer(self::BUFFER_KEYS['PROCESSING_MIGRATION']) === 'true') {
             return false;
         }
 
@@ -2632,9 +2643,9 @@ abstract class ModulBase extends \IPSModule
      */
     private function registerVariable($feature, $exposeType = null)
     {
-        // Wenn Migration läuft, keine neue Variable anlegen
-        if ($this->GetBuffer('migrating') === 'true') {
-            return;
+        // Während Migration keine Variablen erstellen
+        if($this->GetBuffer(self::BUFFER_KEYS['PROCESSING_MIGRATION']) === 'true') {
+            return false;
         }
 
         $featureId = is_array($feature) ? $feature['property'] : $feature;
@@ -2799,9 +2810,9 @@ abstract class ModulBase extends \IPSModule
      */
     private function registerColorVariable($ident, $feature)
     {
-        // Migration-Check am Anfang
-        if ($this->GetBuffer('migrating') === 'true') {
-            return;
+        // Während Migration keine Variablen erstellen
+        if($this->GetBuffer(self::BUFFER_KEYS['PROCESSING_MIGRATION']) === 'true') {
+            return false;
         }
 
         switch ($feature['name']) {
@@ -2855,9 +2866,9 @@ abstract class ModulBase extends \IPSModule
      */
     private function registerPresetVariables(array $presets, string $label, string $variableType, array $feature)
     {
-        // Migration-Check am Anfang
-        if ($this->GetBuffer('migrating') === 'true') {
-            return;
+        // Während Migration keine Variablen erstellen
+        if($this->GetBuffer(self::BUFFER_KEYS['PROCESSING_MIGRATION']) === 'true') {
+            return false;
         }
 
         $this->SendDebug(__FUNCTION__, 'Registering preset variables for: ' . $label, 0);
@@ -2892,8 +2903,8 @@ abstract class ModulBase extends \IPSModule
      */
     private function registerSpecialVariable($feature)
     {
-        // Migration-Check am Anfang
-        if ($this->GetBuffer('migrating') === 'true') {
+        // Während Migration keine Variablen erstellen
+        if($this->GetBuffer(self::BUFFER_KEYS['PROCESSING_MIGRATION']) === 'true') {
             return false;
         }
 
