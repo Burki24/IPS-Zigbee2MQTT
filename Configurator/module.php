@@ -387,7 +387,7 @@ class Zigbee2MQTTConfigurator extends IPSModule
      */
     public function getDevices()
     {
-        $Result = @$this->SendData('zigbee2mqtt/SymconExtension/lists/request/getDevices');
+        $Result = @$this->SendData('/SymconExtension/lists/request/getDevices');
         if ($Result) {
             return $Result['list'];
         }
@@ -401,7 +401,7 @@ class Zigbee2MQTTConfigurator extends IPSModule
      */
     public function getGroups()
     {
-        $Result = @$this->SendData('zigbee2mqtt/SymconExtension/lists/request/getGroups');
+        $Result = @$this->SendData('/SymconExtension/lists/request/getGroups');
         if ($Result) {
             return $Result['list'];
         }
