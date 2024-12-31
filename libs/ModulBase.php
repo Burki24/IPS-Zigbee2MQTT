@@ -815,6 +815,10 @@ abstract class ModulBase extends \IPSModule
      */
     protected function SetValue($ident, $value)
     {
+        if (!$this->HasActiveParent()) {
+            return;
+        }
+
         $variableID = @$this->GetIDForIdent($ident);
         if (!$variableID) {
             $this->SendDebug(__FUNCTION__, 'Variable nicht gefunden: ' . $ident, 0);
@@ -840,8 +844,7 @@ abstract class ModulBase extends \IPSModule
                     if ($association['Name'] == $value) {
                         $adjustedValue = $association['Value'];
                         $this->SendDebug(__FUNCTION__, 'Profilwert gefunden: ' . $value . ' -> ' . $adjustedValue, 0);
-                        $ValueIdent = IPS_GetObject($variableID)['ObjectIdent'];
-                        parent::SetValue($ValueIdent, $adjustedValue);
+                        parent::SetValue($ident, $adjustedValue);
                         return;
                     }
                 }
@@ -1032,15 +1035,24 @@ abstract class ModulBase extends \IPSModule
     private function processVariable($key, $value, $payload, $knownVariables)
     {
         $lowerKey = strtolower($key);
+        $ident = $key;
 
-        // Prüfen, ob die Variable bekannt ist
-        if (!array_key_exists($lowerKey, $knownVariables)) {
-            $this->SendDebug(__FUNCTION__, 'Variable unbekannt, übersprungen: ' . $key, 0);
+        // Prüfe zuerst, ob eine Variable mit diesem Ident in Symcon existiert
+        $variableID = @$this->GetIDForIdent($ident);
+        if ($variableID) {
+            $this->SendDebug(__FUNCTION__, 'Existierende Variable gefunden: ' . $ident, 0);
+            $this->SetValue($ident, $value);
             return;
         }
 
+        // Wenn keine existierende Variable gefunden wurde, prüfe auf bekannte Variablen aus JSON
+        if (!array_key_exists($lowerKey, $knownVariables)) {
+            $this->SendDebug(__FUNCTION__, 'Variable weder in Symcon noch in JSON bekannt, übersprungen: ' . $key, 0);
+            return;
+        }
+
+        // Restliche Logik für neue Variablen aus JSON...
         $variableProps = $knownVariables[$lowerKey];
-        $ident = $key;
 
         // Spezielle Behandlung für Brightness in Lichtgruppen
         foreach (self::$VariableUseStandardProfile as $profile) {
@@ -1049,14 +1061,12 @@ abstract class ModulBase extends \IPSModule
                 $profile['group_type'] === 'light' &&
                 isset($variableProps['group_type']) &&
                 $variableProps['group_type'] === 'light') {
-
                 $this->SendDebug(__FUNCTION__, 'Brightness in Lichtgruppe gefunden - StandardProfile', 0);
                 if ($this->processSpecialVariable($key, $value)) {
                     return;
                 }
             }
         }
-
         // Voltage-Spezialbehandlung
         if ($lowerKey === 'voltage') {
             $this->SendDebug(__FUNCTION__, 'Voltage vor Konvertierung: ' . $value, 0);
@@ -1064,33 +1074,27 @@ abstract class ModulBase extends \IPSModule
                 return;
             }
         }
-
         // Variable registrieren und ID abrufen
         $variableID = $this->getOrRegisterVariable($ident, $variableProps);
         if (!$variableID) {
             return;
         }
-
         // Überprüfen, ob der Wert ein Array ist und entsprechend behandeln
         if (is_array($value)) {
             $this->SendDebug(__FUNCTION__, 'Wert ist ein Array, spezielle Behandlung für: ' . $key, 0);
             $this->SendDebug(__FUNCTION__, 'Array-Inhalt: ' . json_encode($value), 0);
-
             // Spezielle Behandlung für Farbwerte
             if (strpos($ident, 'color') === 0) {
                 $this->handleColorVariable($ident, $value);
             }
-
             return;
         }
-
         // Voltage-Spezialbehandlung hinzufügen
         if ($lowerKey === 'voltage') {
             $this->SendDebug(__FUNCTION__, 'Voltage vor Konvertierung: ' . $value, 0);
             $value = $this->convertMillivoltToVolt($value);
             $this->SendDebug(__FUNCTION__, 'Voltage nach Konvertierung: ' . $value, 0);
         }
-
         // Wert setzen
         $this->SetValue($ident, $value);
     }
@@ -1295,7 +1299,7 @@ abstract class ModulBase extends \IPSModule
     private function handlePresetVariable($ident, $value)
     {
         // Extrahiere den Identifikator der Hauptvariable
-        $mainIdent = str_replace('presets', '', $ident);
+        $mainIdent = str_replace('_presets', '', $ident);
         $this->SendDebug(__FUNCTION__, "Aktion über presets erfolgt, Weiterleitung zur eigentlichen Variable: $mainIdent", 0);
         $this->SendDebug(__FUNCTION__, "Aktion über presets erfolgt, Schreibe zur PresetVariable Variable: $ident", 0);
 
