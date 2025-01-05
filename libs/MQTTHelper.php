@@ -5,15 +5,45 @@ declare(strict_types=1);
 namespace Zigbee2MQTT;
 
 /**
+ * Definition Konstanten
+ */
+trait Constants
+{
+    /** @var string Verzeichnisname für die Exposes JSON Dateien */
+    protected const EXPOSES_DIRECTORY = 'Zigbee2MQTTExposes';
+    /** @var string Basispfad für MQTT-Nachrichten */
+    protected const MQTT_BASE_TOPIC = 'MQTTBaseTopic';
+    /** @var string Spezifisches MQTT-Topic für dieses Gerät */
+    protected const MQTT_TOPIC = 'MQTTTopic';
+    /** @var string Topic für Verfügbarkeit */
+    protected const AVAILABILITY_TOPIC = 'availability';
+    /** @var string Topic für die Extension-Anfragen */
+    protected const SYMCON_EXTENSION_REQUEST = '/SymconExtension/request/';
+    /** @var string Topic für die Extension-Antworten */
+    protected const SYMCON_EXTENSION_RESPONSE = '/SymconExtension/response/';
+    /** @var string Topic für Extension Listen-Anfragen */
+    protected const SYMCON_EXTENSION_LIST_REQUEST = '/SymconExtension/lists/request/';
+    /** @var string Topic für Extension Listen-Anfragen */
+    protected const SYMCON_EXTENSION_LIST_RESPONSE = '/SymconExtension/lists/response/';
+    /** @var string GUID des MQTT Servers */
+    protected const GUID_MQTT_SERVER = '{C6D2AEB3-6E1F-4B2E-8E69-3A1A00246850}';
+    /** @var string GUID des Datenfluss zu einen MQTT Splitter */
+    protected const GUID_MQTT_SEND = '{043EA491-0325-4ADD-8FC2-A30C8EEB4D3F}';
+    /** @var string Name des Attribut welches die Modul-Version enthält */
+    protected const ATTRIBUTE_MODUL_VERSION = 'Version';
+}
+/**
  * @property array $TransactionData Array welches in einem Instanz-Buffer abgelegt wird und aktuelle Anfragen und Antworten von/zur Z2M Bridge enthält
  */
 trait SendData
 {
+    use Constants;
+
     /** @var mixed $MQTTDataArray
      *  Vorlage Daten Array zum versenden an einen MQTT-Splitter
      */
     private static $MQTTDataArray = [
-        'DataID'           => '{043EA491-0325-4ADD-8FC2-A30C8EEB4D3F}',
+        'DataID'           => self::GUID_MQTT_SEND,
         'PacketType'       => 3,
         'QualityOfService' => 0,
         'Retain'           => false,
@@ -30,7 +60,7 @@ trait SendData
      */
     public function Command(string $topic, string $value)
     {
-        return $this->SendData('/' . $this->ReadPropertyString('MQTTTopic') . '/' . $topic, json_decode($value, true), 0);
+        return $this->SendData('/' . $this->ReadPropertyString(self::MQTT_TOPIC) . '/' . $topic, json_decode($value, true), 0);
     }
 
     /**
@@ -66,43 +96,15 @@ trait SendData
 
         $this->SendDebug(__FUNCTION__ . ':Topic', $Topic, 0);
         $this->SendDebug(__FUNCTION__ . ':Payload', json_encode($Payload), 0);
-        $DataJSON = self::BuildRequest($this->ReadPropertyString('MQTTBaseTopic') . $Topic, $Payload);
+        $DataJSON = self::BuildRequest($this->ReadPropertyString(self::MQTT_BASE_TOPIC) . $Topic, $Payload);
         $this->SendDataToParent($DataJSON);
 
         if ($Timeout) {
             $Result = $this->WaitForTransactionEnd($TransactionId, $Timeout);
+            $this->SendDebug(__FUNCTION__ . ' :Result', json_encode($Result), 0);
             if ($Result === false) {
-                // Debug Logging
-                $this->SendDebug(__FUNCTION__ . ':Timeout', sprintf(
-                    'Timeout (%dms) reached for topic: %s',
-                    $Timeout,
-                    $Topic
-                ), 0);
-
-                // Standardantwort bei Device-Info Anfragen
-                if (strpos($Topic, 'getDeviceInfo') !== false) {
-                    return [
-                        'success' => true,
-                        'data' => [
-                            'friendly_name' => 'Unknown',
-                            'model' => 'Unknown',
-                            'description' => 'Device not responding',
-                            'type' => 'Unknown'
-                        ]
-                    ];
-                }
-
-                // Warnung ins Log schreiben
-                $this->LogMessage(
-                    sprintf('Zigbee2MQTT antwortet nicht auf Topic: %s', $Topic),
-                    KL_WARNING
-                );
-
-                return [
-                    'success' => false,
-                    'error' => 'Timeout',
-                    'topic' => $Topic
-                ];
+                trigger_error(sprintf($this->Translate('Zigbee2MQTT did not response on Topic %s'), $Topic), E_USER_NOTICE);
+                return false;
             }
             return $Result;
         }
@@ -123,7 +125,7 @@ trait SendData
         $Sleep = intdiv($Timeout, 1000);
         for ($i = 0; $i < 1000; $i++) {
             $Buffer = $this->TransactionData;
-            if (!array_key_exists($TransactionId, $Buffer)) {
+            if (!isset($Buffer[$TransactionId])) {
                 return false;
             }
             if (count($Buffer[$TransactionId])) {
@@ -174,7 +176,7 @@ trait SendData
             throw new \Exception($this->Translate('TransactionData is locked'), E_USER_NOTICE);
         }
         $TransactionData = $this->TransactionData;
-        if (array_key_exists($Data['transaction'], $TransactionData)) {
+        if (isset($TransactionData[$Data['transaction']])) {
             $TransactionData[$Data['transaction']] = $Data;
             $this->TransactionData = $TransactionData;
             $this->unlock('TransactionData');

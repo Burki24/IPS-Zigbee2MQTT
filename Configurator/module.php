@@ -44,8 +44,8 @@ class Zigbee2MQTTConfigurator extends IPSModule
     {
         //Never delete this line!
         parent::Create();
-        $this->ConnectParent('{C6D2AEB3-6E1F-4B2E-8E69-3A1A00246850}');
-        $this->RegisterPropertyString('MQTTBaseTopic', 'zigbee2mqtt');
+        $this->ConnectParent(self::GUID_MQTT_SERVER);
+        $this->RegisterPropertyString(self::MQTT_BASE_TOPIC, 'zigbee2mqtt');
         $this->TransactionData = [];
     }
 
@@ -59,7 +59,7 @@ class Zigbee2MQTTConfigurator extends IPSModule
         //Never delete this line!
         parent::ApplyChanges();
 
-        $BaseTopic = $this->ReadPropertyString('MQTTBaseTopic');
+        $BaseTopic = $this->ReadPropertyString(self::MQTT_BASE_TOPIC);
         if (empty($BaseTopic)) {
             $this->SetStatus(IS_INACTIVE);
             $this->SetReceiveDataFilter('NOTHING_TO_RECEIVE'); //block all
@@ -67,19 +67,19 @@ class Zigbee2MQTTConfigurator extends IPSModule
         }
         $this->SetStatus(IS_ACTIVE);
         //Setze Filter für ReceiveData
-        $this->SetReceiveDataFilter('.*"Topic":"' . $BaseTopic . '/SymconExtension/lists/response.*');
+        $this->SetReceiveDataFilter('.*"Topic":"' . $BaseTopic . self::SYMCON_EXTENSION_LIST_RESPONSE . '.*');
     }
 
     /**
      * RequestAction
      *
-     * @param  string $Ident
-     * @param  mixed $Value
+     * @param  string $ident
+     * @param  mixed $value
      * @return void
      */
-    public function RequestAction($Ident, $Value)
+    public function RequestAction($ident, $value)
     {
-        switch ($Ident) {
+        switch ($ident) {
             case 'ReloadForm':
                 $this->ReloadForm();
                 break;
@@ -97,7 +97,7 @@ class Zigbee2MQTTConfigurator extends IPSModule
         if ($this->GetStatus() == IS_CREATING) {
             return '';
         }
-        $BaseTopic = $this->ReadPropertyString('MQTTBaseTopic');
+        $BaseTopic = $this->ReadPropertyString(self::MQTT_BASE_TOPIC);
         $Devices = [];
         $Groups = [];
         $Form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
@@ -127,7 +127,7 @@ class Zigbee2MQTTConfigurator extends IPSModule
             $BridgeIDs = array_filter(IPS_GetInstanceListByModuleID('{00160D82-9E2F-D1BD-6D0B-952F945332C5}'), [$this, 'FilterInstances']);
             $BridgeID = 0;
             foreach ($BridgeIDs as $BridgeID) {
-                if (@IPS_GetProperty($BridgeID, 'MQTTBaseTopic') == $BaseTopic) {
+                if (@IPS_GetProperty($BridgeID, self::MQTT_BASE_TOPIC) == $BaseTopic) {
                     break;
                 }
             }
@@ -155,67 +155,67 @@ class Zigbee2MQTTConfigurator extends IPSModule
             return json_encode($Form);
         }
         //Devices
-        $ValuesDevices = [];
-        $ValueId = 1;
+        $valuesDevices = [];
+        $valueId = 1;
         foreach ($Devices as $device) {
-            $Value = []; //Array leeren
+            $value = []; //Array leeren
             $instanceID = array_search($device['ieeeAddr'], $IPSDevicesByIEEE);
             if ($instanceID) { //erst nach IEEE suchen
                 unset($IPSDevicesByIEEE[$instanceID]);
-                if (array_key_exists($instanceID, $IPSDevicesByTopic)) { //wenn auch in IPSDevicesByTopic vorhanden, hier löschen
+                if (isset($IPSDevicesByTopic[$instanceID])) { //wenn auch in IPSDevicesByTopic vorhanden, hier löschen
                     unset($IPSDevicesByTopic[$instanceID]);
                 }
             } else { // dann nach Topic suchen
                 $instanceID = array_search($device['friendly_name'], $IPSDevicesByTopic);
                 unset($IPSDevicesByTopic[$instanceID]);
-                if (array_key_exists($instanceID, $IPSDevicesByIEEE)) { //wenn auch in IPSDevicesByIEEE vorhanden, hier löschen
+                if (isset($IPSDevicesByIEEE[$instanceID])) { //wenn auch in IPSDevicesByIEEE vorhanden, hier löschen
                     unset($IPSDevicesByIEEE[$instanceID]);
                 }
             }
             $Location = explode('/', $device['friendly_name']);
             $Name = array_pop($Location);
             if ($instanceID) {
-                $Value['name'] = IPS_GetName($instanceID);
-                $Value['instanceID'] = $instanceID;
+                $value['name'] = IPS_GetName($instanceID);
+                $value['instanceID'] = $instanceID;
 
             } else {
-                $Value['name'] = $Name;
-                $Value['instanceID'] = 0;
+                $value['name'] = $Name;
+                $value['instanceID'] = 0;
             }
-            $Value['parent'] = $this->AddParentElement($ValueId, $ValuesDevices, $Location, self::$DeviceValues);
-            $Value['id'] = $ValueId++;
-            $Value['ieee_address'] = $device['ieeeAddr'];
-            $Value['topic'] = $device['friendly_name'];
-            $Value['networkAddress'] = $device['networkAddress'];
-            $Value['type'] = $device['type'];
-            $Value['vendor'] = (array_key_exists('vendor', $device) ? $device['vendor'] : $this->Translate('Unknown'));
-            $Value['modelID'] = (array_key_exists('modelID', $device) ? $device['modelID'] : $this->Translate('Unknown'));
-            $Value['description'] = (array_key_exists('description', $device) ? $device['description'] : $this->Translate('Unknown'));
-            $Value['power_source'] = (array_key_exists('powerSource', $device) ? $this->Translate($device['powerSource']) : $this->Translate('Unknown'));
-            $Value['create'] =
+            $value['parent'] = $this->AddParentElement($valueId, $valuesDevices, $Location, self::$DeviceValues);
+            $value['id'] = $valueId++;
+            $value['ieee_address'] = $device['ieeeAddr'];
+            $value['topic'] = $device['friendly_name'];
+            $value['networkAddress'] = $device['networkAddress'];
+            $value['type'] = $device['type'];
+            $value['vendor'] = $device['vendor'] ?? $this->Translate('Unknown');
+            $value['modelID'] = $device['modelID'] ?? $this->Translate('Unknown');
+            $value['description'] = $device['description'] ?? $this->Translate('Unknown');
+            $value['power_source'] = isset($device['powerSource']) ? $this->Translate($device['powerSource']) : $this->Translate('Unknown');
+            $value['create'] =
                 [
                     'moduleID'      => '{E5BB36C6-A70B-EB23-3716-9151A09AC8A2}',
                     'location'      => $Location,
                     'configuration' => [
-                        'MQTTBaseTopic'    => $BaseTopic,
-                        'MQTTTopic'        => $device['friendly_name'],
-                        'IEEE'             => $device['ieeeAddr']
+                        self::MQTT_BASE_TOPIC    => $BaseTopic,
+                        self::MQTT_TOPIC         => $device['friendly_name'],
+                        'IEEE'                   => $device['ieeeAddr']
                     ]
                 ];
-            array_push($ValuesDevices, $Value);
+            array_push($valuesDevices, $value);
         }
         foreach ($IPSDevicesByIEEE as $instanceID => $IEEE) {
             $Topic = '';
-            if (array_key_exists($instanceID, $IPSDevicesByTopic)) { //wenn auch in IPSDevicesByTopic vorhanden, hier löschen
+            if (isset($IPSDevicesByTopic[$instanceID])) { //wenn auch in IPSDevicesByTopic vorhanden, hier löschen
                 $Topic = $IPSDevicesByTopic[$instanceID];
                 unset($IPSDevicesByTopic[$instanceID]);
             }
             $Location = explode('/', $Topic);
             array_pop($Location);
-            $ValuesDevices[] = [
+            $valuesDevices[] = [
                 'name'               => IPS_GetName($instanceID),
-                'id'                 => $ValueId++,
-                'parent'             => $this->AddParentElement($ValueId, $ValuesDevices, $Location, self::$DeviceValues),
+                'id'                 => $valueId++,
+                'parent'             => $this->AddParentElement($valueId, $valuesDevices, $Location, self::$DeviceValues),
                 'instanceID'         => $instanceID,
                 'ieee_address'       => $IEEE,
                 'topic'              => $Topic,
@@ -231,10 +231,10 @@ class Zigbee2MQTTConfigurator extends IPSModule
         foreach ($IPSDevicesByTopic as $instanceID => $Topic) {
             $Location = explode('/', $Topic);
             array_pop($Location);
-            $ValuesDevices[] = [
+            $valuesDevices[] = [
                 'name'               => IPS_GetName($instanceID),
-                'id'                 => $ValueId++,
-                'parent'             => $this->AddParentElement($ValueId, $ValuesDevices, $Location, self::$DeviceValues),
+                'id'                 => $valueId++,
+                'parent'             => $this->AddParentElement($valueId, $valuesDevices, $Location, self::$DeviceValues),
                 'instanceID'         => $instanceID,
                 'ieee_address'       => @IPS_GetProperty($instanceID, 'IEEE'),
                 'topic'              => $Topic,
@@ -255,62 +255,62 @@ class Zigbee2MQTTConfigurator extends IPSModule
         $IPSGroupByTopic = $this->GetIPSInstancesByBaseTopic('{11BF3773-E940-469B-9DD7-FB9ACD7199A2}', $BaseTopic);
         $this->SendDebug('IPS Group Topic', json_encode($IPSGroupByTopic), 0);
 
-        $ValuesGroups = [];
-        $ValueId = 1;
+        $valuesGroups = [];
+        $valueId = 1;
         foreach ($Groups as $group) {
-            $Value = []; //Array leeren
+            $value = []; //Array leeren
             $instanceID = array_search($group['ID'], $IPSGroupById);
             if ($instanceID) { //erst nach ID suchen
                 unset($IPSGroupById[$instanceID]);
-                if (array_key_exists($instanceID, $IPSGroupByTopic)) { //wenn auch in IPSGroupByTopic vorhanden, hier löschen
+                if (isset($IPSGroupByTopic[$instanceID])) { //wenn auch in IPSGroupByTopic vorhanden, hier löschen
                     unset($IPSGroupByTopic[$instanceID]);
                 }
             } else { // dann nach Topic suchen
                 $instanceID = array_search($group['friendly_name'], $IPSGroupByTopic);
                 unset($IPSGroupByTopic[$instanceID]);
-                if (array_key_exists($instanceID, $IPSGroupById)) { //wenn auch in IPSGroupById vorhanden, hier löschen
+                if (isset($IPSGroupById[$instanceID])) { //wenn auch in IPSGroupById vorhanden, hier löschen
                     unset($IPSGroupById[$instanceID]);
                 }
             }
             $Location = explode('/', $group['friendly_name']);
             $Name = array_pop($Location);
             if ($instanceID) {
-                $Value['name'] = IPS_GetName($instanceID);
-                $Value['instanceID'] = $instanceID;
+                $value['name'] = IPS_GetName($instanceID);
+                $value['instanceID'] = $instanceID;
 
             } else {
-                $Value['name'] = $Name;
-                $Value['instanceID'] = 0;
+                $value['name'] = $Name;
+                $value['instanceID'] = 0;
             }
-            $Value['parent'] = $this->AddParentElement($ValueId, $ValuesGroups, $Location, self::$GroupValues);
-            $Value['id'] = $ValueId++;
-            $Value['ID'] = $group['ID'];
-            $Value['topic'] = $group['friendly_name'];
-            $Value['DevicesCount'] = (string) count($group['devices']);
-            $Value['create'] =
+            $value['parent'] = $this->AddParentElement($valueId, $valuesGroups, $Location, self::$GroupValues);
+            $value['id'] = $valueId++;
+            $value['ID'] = $group['ID'];
+            $value['topic'] = $group['friendly_name'];
+            $value['DevicesCount'] = (string) count($group['devices']);
+            $value['create'] =
                 [
                     'moduleID'      => '{11BF3773-E940-469B-9DD7-FB9ACD7199A2}',
                     'location'      => $Location,
                     'configuration' => [
-                        'MQTTBaseTopic'    => $BaseTopic,
-                        'MQTTTopic'        => $group['friendly_name'],
-                        'GroupId'          => $group['ID']
+                        self::MQTT_BASE_TOPIC    => $BaseTopic,
+                        self::MQTT_TOPIC         => $group['friendly_name'],
+                        'GroupId'                => $group['ID']
                     ]
                 ];
-            array_push($ValuesGroups, $Value);
+            array_push($valuesGroups, $value);
         }
         foreach ($IPSGroupById as $instanceID => $ID) {
             $Topic = '';
-            if (array_key_exists($instanceID, $IPSGroupByTopic)) { //wenn auch in IPSGroupByTopic vorhanden, hier löschen
+            if (isset($IPSGroupByTopic[$instanceID])) { //wenn auch in IPSGroupByTopic vorhanden, hier löschen
                 $Topic = $IPSGroupByTopic[$instanceID];
                 unset($IPSGroupByTopic[$instanceID]);
             }
             $Location = explode('/', $Topic);
             array_pop($Location);
-            $ValuesGroups[] = [
+            $valuesGroups[] = [
                 'name'                  => IPS_GetName($instanceID),
-                'id'                    => $ValueId++,
-                'parent'                => $this->AddParentElement($ValueId, $ValuesDevices, $Location, self::$GroupValues),
+                'id'                    => $valueId++,
+                'parent'                => $this->AddParentElement($valueId, $valuesDevices, $Location, self::$GroupValues),
                 'instanceID'            => $instanceID,
                 'ID'                    => $ID,
                 'topic'                 => $Topic,
@@ -321,10 +321,10 @@ class Zigbee2MQTTConfigurator extends IPSModule
         foreach ($IPSGroupByTopic as $instanceID => $Topic) {
             $Location = explode('/', $Topic);
             array_pop($Location);
-            $ValuesGroups[] = [
+            $valuesGroups[] = [
                 'name'                  => IPS_GetName($instanceID),
-                'id'                    => $ValueId++,
-                'parent'                => $this->AddParentElement($ValueId, $ValuesDevices, $Location, self::$DeviceValues),
+                'id'                    => $valueId++,
+                'parent'                => $this->AddParentElement($valueId, $valuesDevices, $Location, self::$DeviceValues),
                 'instanceID'            => $instanceID,
                 'ID'                    => @IPS_GetProperty($instanceID, 'GroupId'),
                 'topic'                 => $Topic,
@@ -333,10 +333,10 @@ class Zigbee2MQTTConfigurator extends IPSModule
             ];
         }
 
-        $Form['actions'][0]['items'][0]['values'] = $ValuesDevices;
-        $Form['actions'][0]['items'][0]['rowCount'] = (count($ValuesDevices) < 20 ? count($ValuesDevices) : 20);
-        $Form['actions'][1]['items'][0]['values'] = $ValuesGroups;
-        $Form['actions'][1]['items'][0]['rowCount'] = (count($ValuesGroups) < 20 ? count($ValuesGroups) : 20);
+        $Form['actions'][0]['items'][0]['values'] = $valuesDevices;
+        $Form['actions'][0]['items'][0]['rowCount'] = (count($valuesDevices) < 20 ? count($valuesDevices) : 20);
+        $Form['actions'][1]['items'][0]['values'] = $valuesGroups;
+        $Form['actions'][1]['items'][0]['rowCount'] = (count($valuesGroups) < 20 ? count($valuesGroups) : 20);
         $this->SendDebug('Form', json_encode($Form), 0);
         return json_encode($Form);
     }
@@ -352,7 +352,7 @@ class Zigbee2MQTTConfigurator extends IPSModule
         if ($this->GetStatus() == IS_CREATING) {
             return '';
         }
-        $BaseTopic = $this->ReadPropertyString('MQTTBaseTopic');
+        $BaseTopic = $this->ReadPropertyString(self::MQTT_BASE_TOPIC);
         if (empty($BaseTopic)) {
             return '';
         }
@@ -365,14 +365,11 @@ class Zigbee2MQTTConfigurator extends IPSModule
 
         $ReceiveTopic = $Buffer['Topic'];
         $this->SendDebug('MQTT FullTopic', $ReceiveTopic, 0);
-        $Topic = substr($ReceiveTopic, strlen($BaseTopic . '/SymconExtension/lists/'));
-        $Topics = explode('/', $Topic);
-        $Topic = array_shift($Topics);
-        $this->SendDebug('MQTT Topic', $Topic, 0);
-        $this->SendDebug('MQTT Payload', utf8_decode($Buffer['Payload']), 0);
-        if ($Topic != 'response') {
+        if (strpos($ReceiveTopic, $BaseTopic . self::SYMCON_EXTENSION_LIST_RESPONSE) !== 0) {
             return '';
         }
+        $this->SendDebug('MQTT Topic', $ReceiveTopic, 0);
+        $this->SendDebug('MQTT Payload', utf8_decode($Buffer['Payload']), 0);
         $Payload = json_decode(utf8_decode($Buffer['Payload']), true);
         if (isset($Payload['transaction'])) {
             $this->UpdateTransaction($Payload);
@@ -387,7 +384,7 @@ class Zigbee2MQTTConfigurator extends IPSModule
      */
     public function getDevices()
     {
-        $Result = @$this->SendData('/SymconExtension/lists/request/getDevices');
+        $Result = @$this->SendData(self::SYMCON_EXTENSION_LIST_REQUEST . 'getDevices');
         if ($Result) {
             return $Result['list'];
         }
@@ -401,7 +398,7 @@ class Zigbee2MQTTConfigurator extends IPSModule
      */
     public function getGroups()
     {
-        $Result = @$this->SendData('/SymconExtension/lists/request/getGroups');
+        $Result = @$this->SendData(self::SYMCON_EXTENSION_LIST_REQUEST . 'getGroups');
         if ($Result) {
             return $Result['list'];
         }
@@ -411,13 +408,13 @@ class Zigbee2MQTTConfigurator extends IPSModule
     /**
      * TopicPathExists
      *
-     * @param  array $Values
+     * @param  array $values
      * @param  string $Topic
      * @return int|false
      */
-    private function TopicPathExists(array $Values, string $Topic)
+    private function TopicPathExists(array $values, string $Topic)
     {
-        foreach ($Values as $dir) {
+        foreach ($values as $dir) {
             if ($dir['topic'] === $Topic) {
                 return $dir['id'];
             }
@@ -510,7 +507,7 @@ class Zigbee2MQTTConfigurator extends IPSModule
         $InstanceIDList = array_filter(IPS_GetInstanceListByModuleID($GUID), [$this, 'FilterInstances']);
         foreach ($InstanceIDList as $InstanceID) {
             if (@IPS_GetProperty($InstanceID, 'MQTTBaseTopic') == $BaseTopic) {
-                $Devices[$InstanceID] = @IPS_GetProperty($InstanceID, 'MQTTTopic');
+                $Devices[$InstanceID] = @IPS_GetProperty($InstanceID, self::MQTT_TOPIC);
             }
         }
         return $Devices;
@@ -524,6 +521,10 @@ class Zigbee2MQTTConfigurator extends IPSModule
      */
     private function FilterInstances(int $InstanceID): bool
     {
-        return IPS_GetInstance($InstanceID)['ConnectionID'] == IPS_GetInstance($this->InstanceID)['ConnectionID'];
+        return (
+            IPS_GetInstance($InstanceID)['ConnectionID'] == IPS_GetInstance($this->InstanceID)['ConnectionID']
+        ) && (
+            IPS_GetProperty($InstanceID, self::MQTT_BASE_TOPIC) == IPS_GetProperty($this->InstanceID, self::MQTT_BASE_TOPIC)
+        );
     }
 }
